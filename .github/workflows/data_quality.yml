@@ -1,0 +1,32 @@
+name: Data Quality
+
+on:
+  push:
+    paths:
+      - "data/**"
+      - "src/**"
+      - "tests/**"
+  pull_request:
+    paths:
+      - "data/**"
+      - "src/**"
+      - "tests/**"
+
+jobs:
+  data-quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run data quality tests
+        run: pytest tests/ -v
