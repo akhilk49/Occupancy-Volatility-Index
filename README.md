@@ -43,7 +43,12 @@ Occupancy-Volatility-Index/
 
 ## Team Charter
 
-<!-- Manuel fills in on Day 1 -->
+**Team Members:** Akhil K Kurian, Manuel Beracah
+**Goal:** Deliver a high-quality data pipeline and Streamlit dashboard to analyze occupancy volatility.
+**Working Agreements:**
+- Daily standups and code reviews on every PR.
+- Adhere strictly to the SPEC and PR conventions.
+- No direct pushes to main; everything goes through individual branches.
 
 ## Decisions Log
 
