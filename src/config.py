@@ -47,3 +47,20 @@ SEASONAL_PRICING_REQUIRED_COLS: list[str] = [
     "base_rate",
     "demand_tier",
 ]
+
+# ---------------------------------------------------------------------------
+# Capacity assumption (Decision D2 — SPEC Section 11.3)
+# ---------------------------------------------------------------------------
+# `total_rooms_available` is absent from bookings.csv (confirmed Day 1 profiling).
+# All occupancy rate calculations (Metric #1) use this constant as the denominator.
+# Update this value if the real hotel capacity is obtained before Day 10.
+ASSUMED_TOTAL_ROOMS: int = 100
+
+# Canonical segment labels (Decision confirmed Day 2 — booking channel, not customer type)
+CANONICAL_SEGMENTS: list[str] = [
+    "Travel Agency",
+    "Direct",
+    "Corporate",
+    "Group",
+    "Walk-in",
+]

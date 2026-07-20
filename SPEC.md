@@ -43,10 +43,12 @@ Do not introduce additional frameworks (no Django/Flask, no dbt, no Airflow) —
 
 ## 4. Data Contracts
 
-Raw files live in `data/raw/` and are **never modified in place**. Treat the schema below as the working assumption until Day 1 profiling confirms or corrects it — if the real CSVs differ, update this section first, then the code.
+Raw files live in `data/raw/` and are **never modified in place**. Schema below reflects confirmed findings from Day 1–2 profiling.
 
 ### `bookings.csv` (1 row per reservation)
-`reservation_id, segment, room_type, booking_date, check_in_date, check_out_date, nights, rate, total_rooms_available`
+`reservation_id, segment, room_type, booking_date, check_in_date, check_out_date, nights, rate`
+
+> **Day 1 update:** `total_rooms_available` is **absent** from the raw file. Capacity is handled via `ASSUMED_TOTAL_ROOMS` in `src/config.py` (see Section 11).
 
 ### `cancellations.csv` (1 row per cancellation event)
 `reservation_id, cancellation_date, reason, refund_status`
@@ -56,14 +58,16 @@ Raw files live in `data/raw/` and are **never modified in place**. Treat the sch
 
 ### Join logic
 - `bookings` LEFT JOIN `cancellations` ON `reservation_id` (most bookings do not cancel)
-- `bookings` JOIN `seasonal_pricing` ON `check_in_date = date` (or nearest date within season window)
+- `bookings` JOIN `seasonal_pricing` ON `check_in_date = date` (classification based on check-in date only — see Section 11 decision D3)
 - Output: single fact table `fact_bookings_enriched`, one row per reservation
 
-### Known open questions (resolve during Day 1–2 profiling, then update this file)
-- Is `segment` a channel (Travel Agency/Direct/Corporate/Group/Walk-in) or a customer-type field?
-- Is occupancy tracked at room-night grain or booking grain?
-- Does `total_rooms_available` actually exist, or must capacity be assumed?
-- Do all three files share a consistent date range?
+### Open questions resolved (Day 1–2)
+| Question | Resolution |
+|---|---|
+| Is `segment` channel or customer-type? | **Booking channel** — canonical values: `Travel Agency`, `Direct`, `Corporate`, `Group`, `Walk-in` |
+| Occupancy grain? | **Room-night grain** — each booking contributes `nights` room-nights |
+| Does `total_rooms_available` exist? | **No** — use `ASSUMED_TOTAL_ROOMS` constant from `config.py` |
+| Consistent date range across files? | To be validated in Day 9 join step (Manuel's scope) |
 
 ## 5. Metrics — Exact Definitions
 
@@ -266,6 +270,108 @@ Both teammates contribute equally and visibly: **each person opens their own PR 
 - No hardcoded file paths — read from a `config.py` or constants at the top of each module.
 - Every cleaning decision (null handling, dedup, imputation) needs an inline comment explaining *why*, not just *what*.
 - `notebooks/` is for exploration only. Anything reused in the pipeline gets promoted into `src/`.
+
+## 11. Pipeline Architecture (confirmed Day 4)
+
+### 11.1 Data Flow
+
+```
+data/raw/
+  bookings.csv
+  cancellations.csv          ──► src/ingest.py
+  seasonal_pricing.csv            │
+                                  │  • load_csv() — read-only, no transforms
+                                  │  • validate_schema() — flag missing cols
+                                  │  • log_ingestion_summary() — row/null counts
+                                  │  • check_primary_key() — flag duplicate IDs
+                                  ▼
+                             src/clean.py
+                                  │
+                                  │  bookings:  dedup, date standardisation,
+                                  │             null handling, segment normalisation
+                                  │  cancellations: dedup, date standardisation
+                                  │  seasonal_pricing: dedup, date alignment
+                                  ▼
+                             data/interim/
+                               bookings_clean.csv
+                               cancellations_clean.csv
+                               seasonal_pricing_clean.csv
+                                  │
+                                  ▼
+                             src/features.py
+                                  │
+                                  │  • join_fact_table() — LEFT JOIN + season JOIN
+                                  │  • add_cancel_flag() — is_cancelled boolean
+                                  │  • add_lead_time() — check_in - booking_date
+                                  │  • add_occupancy_rate() — room-night grain
+                                  ▼
+                             data/processed/
+                               fact_bookings_enriched.csv
+                                  │
+                                  ▼
+                             src/load.py
+                                  │
+                                  │  • Executes sql/schema.sql DDL
+                                  │  • Populates dim_segment + fact_bookings_enriched
+                                  ▼
+                             data/processed/occupancy.db  (SQLite)
+                                  │
+                                  ▼
+                             src/queries.py  ◄──── app/dashboard.py
+                                  │
+                                  │  Parameterised query functions — no raw SQL
+                                  │  in the Streamlit layer
+                                  ▼
+                             Streamlit dashboard
+```
+
+### 11.2 Tool choices and rationale
+
+| Step | Tool | Rationale |
+|---|---|---|
+| Ingestion & validation | pandas + stdlib | Sufficient for static CSVs; no streaming or scheduling needed |
+| Cleaning & transformation | pandas | Familiar, auditable, one function per decision |
+| Storage | SQLite (local) | Zero-setup for dev; schema written Postgres-portable for easy migration |
+| SQL layer | SQLAlchemy (text queries) | Keeps queries in `.sql` files, not f-strings; safe parameterisation |
+| Dashboard | Streamlit | Specified in SPEC — not substitutable |
+| CI | GitHub Actions | Free for public repos; runs pytest on every push/PR |
+
+### 11.3 Architecture decisions (Day 4)
+
+**D1 — Daily revenue explosion for Metric #8 (Revenue Volatility Index)**
+
+Manuel's Day 4 review flagged that `fact_bookings_enriched` is at reservation grain, but Metric #8 requires `daily_room_revenue`. Decision: **handle this in the SQL layer, not the Python pipeline**. `kpi_queries.sql` will join the fact table with a date-spine (generated via a recursive CTE or a `dim_date` table) to explode multi-night bookings into daily revenue rows for this metric only. The fact table stays at reservation grain — simpler pipeline, no intermediate exploded CSV.
+
+**D2 — Capacity assumption for Metric #1 (Occupancy Rate)**
+
+`total_rooms_available` is absent from `bookings.csv` (confirmed Day 1). Decision: introduce `ASSUMED_TOTAL_ROOMS: int = 100` in `src/config.py` as an explicit, documented constant. All occupancy rate calculations use this value. If the real capacity figure is obtained later, it is updated in one place. This assumption is flagged in every query and dashboard tooltip that uses Metric #1.
+
+**D3 — Season tag join on check-in date only**
+
+Manuel's review noted that bookings spanning multiple seasons create ambiguity. Decision: classify the entire booking's season based strictly on its `check_in_date`. This is the simplest consistent rule, avoids exploding the fact table for the join, and matches how the hotel operationally assigns a season to a stay. Documented here so it is not re-debated downstream.
+
+**D4 — Segment null handling**
+
+Rows where `segment` is null cannot be attributed to any channel. Decision: retain these rows in the fact table with `segment_name = 'Unknown'` so total row counts are preserved. They are excluded from segment-level metric aggregations (GROUP BY will not group them with any real segment).
+
+### 11.4 File-level ownership (pipeline modules)
+
+| File | Owner | Implemented |
+|---|---|---|
+| `src/config.py` | Akhil | Day 1 |
+| `src/ingest.py` | Akhil | Day 6 |
+| `src/clean.py` — bookings | Akhil | Day 7–8 |
+| `src/clean.py` — cancellations | Manuel | Day 7 |
+| `src/clean.py` — seasonal_pricing | Manuel | Day 8 |
+| `src/features.py` — join | Akhil | Day 9 |
+| `src/features.py` — lead_time, cancel_flag | Akhil | Day 10 |
+| `src/features.py` — occupancy_rate, season_tag | Manuel | Day 10 |
+| `src/load.py` | Akhil | Day 11 |
+| `src/queries.py` | Akhil | Days 12–14 |
+| `sql/schema.sql` | Akhil | Day 5 |
+| `sql/kpi_queries.sql` | Akhil | Days 12–14 |
+| `app/dashboard.py` | Manuel | Days 16–19 |
+| `tests/test_data_quality.py` | Akhil | Day 17 |
 
 ## 10. Global Definition of Done (Sprint 1)
 
