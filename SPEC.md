@@ -117,151 +117,119 @@ Occupancy-Volatility-Index/
 
 ## 7. Day-by-Day Build Roadmap (4 weeks / 20 working days)
 
-Each day splits into an **Akhil scope** and a **Manuel scope** — each becomes its own branch and its own PR (see Section 8). Where a day also has a joint item (repo setup, mentor submission), it's folded into one of the two PRs, alternating whose PR carries it.
+> **Solo from Day 8 onwards.** Manuel left the project after Day 6. Days 1–7 are complete.
+> From Day 8, all work is Akhil's sole responsibility. Each day is a single PR (`day-XX-akhil`).
+> The plan below absorbs all remaining Manuel scope into the solo schedule.
 
-### Week 1 — Discovery, PRD & Pipeline Design
-Gate: nothing in `src/` beyond stubs/exploration until PRD + this spec are confirmed against the real data.
+### ✅ Week 1 — Discovery, PRD & Pipeline Design (COMPLETE)
 
-- **Day 1**
-  - *Akhil:* Profile `bookings.csv` — columns, nulls, dtypes, duplicates, date formats. *Done when:* profiling notes committed under `notebooks/`.
-  - *Manuel:* Profile `cancellations.csv` and `seasonal_pricing.csv` — same checks. *Done when:* profiling notes committed under `notebooks/`.
-  - *Joint (in Akhil's PR):* repo scaffold confirmed, branch protection, Kanban board set up.
-  - *Joint (in Manuel's PR):* Team Charter filled into `README.md`.
+- **Day 1** ✅ Repo scaffold + `bookings.csv` profiling notebook
+- **Day 2** ✅ Document `bookings.csv` data quality issues; segment definition resolved
+- **Day 3** ✅ Draft `ingest.py` function signatures and docstrings
+- **Day 4** ✅ Pipeline architecture written into `SPEC.md` / `PRD.md`; Manuel's review gaps addressed
+- **Day 5** ✅ `sql/schema.sql` finalised — all metric input columns, 5 indexes, 6 KPI views
 
-- **Day 2**
-  - *Akhil:* Document data quality issues found in `bookings.csv` (duplicates, bad dates, inconsistent segment labels).
-  - *Manuel:* Document data quality issues in `cancellations.csv` + `seasonal_pricing.csv`.
-  - *Both, done when:* each person's findings appended to `docs/data_quality_notes.md` under their own name/section; segment-definition open question (Section 4) discussed and resolved or escalated to mentor.
+### ✅ Week 2 — Data Cleaning & Feature Engineering (Days 6–7 complete)
 
-- **Day 3**
-  - *Akhil:* Draft `ingest.py` function signatures + docstrings (no implementation yet).
-  - *Manuel:* Draft volatility metric definitions (Section 5) and dashboard wireframe/user flow.
-  - *Done when:* `src/ingest.py` has stub signatures; a wireframe sketch or notes file exists under `notebooks/`.
+- **Day 6** ✅ Implement `ingest.py` — schema validation, ingestion log, PK check
+- **Day 7** ✅ Implement full `clean.py` — bookings, cancellations, seasonal pricing, segment normalisation
 
-- **Day 4**
-  - *Akhil:* Write the pipeline architecture section (data flow, tool choices) into `SPEC.md`/`PRD.md`.
-  - *Manuel:* Review pipeline design against dashboard needs; flag gaps.
-  - *Done when:* both docs reflect the confirmed real-data schema; Manuel's review comments addressed in Akhil's PR or a follow-up commit.
+---
 
-- **Day 5**
-  - *Akhil:* Finalize `sql/schema.sql`.
-  - *Manuel:* Finalize the metric list + wireframe; help proofread PRD/SPEC before mentor submission.
-  - *Done when:* schema file matches Section 4/5; PRD + pipeline design submitted for mentor approval.
+### 🔨 Week 2 continued — Feature Engineering (solo)
 
-### Week 2 — Data Cleaning & Feature Engineering
-- **Day 6**
-  - *Akhil:* Implement `ingest.py` — schema validation + ingestion log. *Done when:* running it against `data/raw/*.csv` prints row counts and flags missing required columns.
-  - *Manuel:* Set up `data/interim/` and `data/processed/` folder conventions; write the loader stub in `notebooks/` for early EDA. *Done when:* folder structure committed, EDA notebook can read from `data/raw/`.
+- **Day 8** — Implement `features.py`: join logic + all feature columns
+  - `join_fact_table()` — bookings LEFT JOIN cancellations, JOIN seasonal_pricing on check_in_date
+  - `add_cancel_flag()` — boolean is_cancelled from join result
+  - `add_lead_time()` — check_in_date minus booking_date in days
+  - `add_occupancy_rate()` — room_nights / ASSUMED_TOTAL_ROOMS per day
+  - Write fact table to `data/processed/fact_bookings_enriched.csv`
+  - Validate: row count matches bookings (no silent drops); log any unmatched reservation_ids
+  - *Done when:* `python -m src.features` produces `fact_bookings_enriched.csv` with all columns from SPEC Section 5
 
-- **Day 7**
-  - *Akhil:* Implement `clean.py` for `bookings.csv` — nulls, duplicates, date standardization.
-  - *Manuel:* Implement `clean.py` for `cancellations.csv` — match reservation IDs, standardize dates.
-  - *Done when:* each person's cleaned output lands in `data/interim/`; every cleaning decision has a one-line justification comment in their own function.
+### 🔨 Week 3 — SQL, Load & Metrics (solo)
 
-- **Day 8**
-  - *Akhil:* Normalize segment labels (spelling/casing inconsistencies) into one canonical list.
-  - *Manuel:* Clean `seasonal_pricing.csv`; align its date range with bookings.
-  - *Done when:* a single canonical segment list exists and both people's cleaned files use it.
+- **Day 9** — Implement `load.py` + full `sql/kpi_queries.sql`
+  - `load_to_sqlite()` — execute `schema.sql` DDL, populate `dim_segment` + `fact_bookings_enriched`
+  - `kpi_queries.sql` — complete all 8 metric queries (Metrics #1–#8), including CoV and daily revenue explosion
+  - *Done when:* `data/processed/occupancy.db` exists; all views return results; every query in `kpi_queries.sql` runs without error
 
-- **Day 9**
-  - *Akhil:* Implement the join logic in `features.py` — bookings + cancellations + seasonal pricing into one fact table.
-  - *Manuel:* Validate the joined fact table's row counts against raw inputs (catch silent drops); write a short validation report.
-  - *Done when:* joined table written to `data/processed/`; Manuel's validation confirms no unexplained row loss.
+- **Day 10** — Implement `src/queries.py` — all parameterised query functions
+  - `get_occupancy_by_segment_day()` — Metric #1
+  - `get_occupancy_volatility_cov()` — Metric #2 (rolling CoV computed in pandas after SQL fetch)
+  - `get_cancellation_rate_by_segment()` — Metric #3
+  - `get_avg_lead_time_by_segment()` — Metric #4
+  - `get_seasonal_concentration()` — Metric #5
+  - `get_segment_volatility_contribution()` — Metric #6 (headline metric)
+  - `get_revenue_at_risk()` — Metric #7
+  - `get_revenue_volatility_index()` — Metric #8
+  - *Done when:* every function returns a non-empty DataFrame when called against `occupancy.db`
 
-- **Day 10**
-  - *Akhil:* Engineer `lead_time_days` and `is_cancelled` flag.
-  - *Manuel:* Engineer `occupancy_rate` (at the grain confirmed Day 1) and `season_tag`.
-  - *Done when:* the processed fact table has every column listed in Section 5's metric inputs.
+- **Day 11** — Write `tests/test_data_quality.py` + CI validation
+  - Row count checks: processed fact table within expected range of raw input
+  - Null % checks: critical columns (`segment_id`, `check_in_date`, `room_nights`) below threshold
+  - Schema drift check: all required columns present in `fact_bookings_enriched`
+  - Duplicate PK check: `reservation_id` unique in processed fact table
+  - Update `.github/workflows/data_quality.yml` to also run against processed data
+  - *Done when:* `pytest tests/ -v` passes locally and CI badge is green
 
-### Week 3 — SQL, Metrics & Analysis
-- **Day 11**
-  - *Akhil:* Implement `load.py` — create `dim_segment` + `fact_bookings_enriched` in SQLite from `schema.sql`.
-  - *Manuel:* Draft the EDA notebook — first look at occupancy trends by segment, independent of the SQL layer (used to cross-check later).
-  - *Done when:* `data/processed/occupancy.db` exists and round-trips correctly; EDA notebook runs end-to-end.
+### 🔨 Week 4 — Dashboard, Polish & Delivery (solo)
 
-- **Day 12**
-  - *Akhil:* Write KPI queries — occupancy rate by segment/day (Metric #1) — in `sql/kpi_queries.sql` and `src/queries.py`.
-  - *Manuel:* Compute rolling CoV of occupancy per segment (Metric #2) in the EDA notebook.
-  - *Done when:* SQL output and notebook output agree on the same numbers for a spot-checked segment.
+- **Day 12** — Implement `app/dashboard.py` — structure + segment ranking view
+  - Page config, sidebar with global filters (date range, season, segment)
+  - Section A: KPI cards — overall occupancy rate, total revenue at risk, most volatile segment
+  - Section B: segment volatility ranking table (Metric #6) with cancellation rate, lead time, revenue at risk
+  - *Done when:* `streamlit run app/dashboard.py` boots without errors and Section B renders with real data
 
-- **Day 13**
-  - *Akhil:* Write cancellation-rate and lead-time queries by segment (Metrics #3, #4).
-  - *Manuel:* Rank segments by volatility contribution (Metric #6); identify the top 2-3 volatile segments.
-  - *Done when:* every segment has values for Metrics #3, #4, #6, backed by both the SQL layer and the notebook.
+- **Day 13** — Add volatility trend chart + revenue views to dashboard
+  - Section C: time-series CoV chart per segment (Metric #2), segment overlay
+  - Revenue Volatility Index chart (Metric #8)
+  - All charts respect sidebar filters
+  - *Done when:* every chart renders; segment filter updates all visuals
 
-- **Day 14**
-  - *Akhil:* Write the seasonal concentration query (Metric #5) and Revenue at Risk query (Metric #7).
-  - *Manuel:* Write the Revenue Volatility Index (Metric #8) in the notebook; dig into *why* top segments are volatile.
-  - *Done when:* every segment has a complete row across all 8 metrics.
+- **Day 14** — Add remaining metric views + polish
+  - Seasonal concentration chart (Metric #5)
+  - Lead time distribution per segment (Metric #4)
+  - Narrative text / tooltips explaining each metric
+  - Visual polish: consistent colour scheme, axis labels, responsive layout
+  - *Done when:* all 8 metrics from SPEC Section 5 are visible and filterable in the running app
 
-- **Day 15**
-  - *Akhil:* Optimize/index the SQL layer for dashboard-speed queries.
-  - *Manuel:* Draft the 1-page findings summary ("which segments, why").
-  - *Done when:* every query used by the app returns in well under 1 second; findings summary validated against the core business question.
+- **Day 15** — SQL optimisation + EDA notebook
+  - Review query plans; add any missing indexes identified during dashboard testing
+  - `notebooks/04_eda_occupancy_trends.ipynb` — segment occupancy trends, CoV cross-check against SQL
+  - Validate SQL output vs notebook output for at least one spot-checked segment
+  - *Done when:* every dashboard query returns under 1 second; notebook runs end-to-end
 
-### Week 4 — Dashboard, Testing & Delivery
-- **Day 16**
-  - *Akhil:* Set up `.github/workflows/data_quality.yml`.
-  - *Manuel:* Scaffold `app/dashboard.py` — layout, segment ranking view.
-  - *Done when:* CI runs `pytest tests/` on every push; dashboard boots with `streamlit run app/dashboard.py`.
+- **Day 16** — Final pipeline run-through + documentation
+  - Run full pipeline from scratch: `python -m src.ingest` → `clean` → `features` → `load` → `streamlit run`
+  - Document the one-command sequence in `README.md`
+  - Update `SPEC.md` Section 11.4 ownership table to reflect solo authorship
+  - Write `docs/findings_summary.md` — which segments are most volatile, why
+  - *Done when:* a person with no prior context can clone the repo and get the dashboard running using only `README.md`; findings summary answers the core business question
 
-- **Day 17**
-  - *Akhil:* Write `tests/test_data_quality.py` (row counts, null %, schema drift, duplicate PK).
-  - *Manuel:* Build the volatility trend chart + segment filter in the dashboard.
-  - *Done when:* tests pass locally and in CI; trend chart renders with working filter.
+- **Day 17** — Viva preparation
+  - Write viva answer notes covering: every pipeline decision, every metric formula, every cleaning decision, every SQL/index choice, dashboard design rationale
+  - Final PR merged, README verified verbatim
+  - *Done when:* can explain every technical decision independently without referring to code
 
-- **Day 18**
-  - *Akhil:* SQL query tuning to keep the dashboard responsive.
-  - *Manuel:* Add season/date-range filters and revenue-at-risk KPI cards to the dashboard.
-  - *Done when:* every metric in Section 5 is visible and filterable in the running app.
+## 8. Git & PR Conventions (solo from Day 8)
 
-- **Day 19**
-  - *Akhil:* Final pipeline run-through — raw CSV to dashboard, one documented command sequence.
-  - *Manuel:* Polish visuals, labels, and narrative text in the app.
-  - *Done when:* a teammate who didn't write the code can run it from a clean clone and get the same dashboard.
-
-- **Day 20**
-  - *Akhil:* Prepare viva answers for pipeline & SQL decisions.
-  - *Manuel:* Prepare viva answers for analysis & dashboard decisions.
-  - *Done when:* final PRs merged; README's "how to run this" section works verbatim; both can explain every decision independently.
-
-## 8. Git & PR Conventions — Individual Daily PRs
-
-Both teammates contribute equally and visibly: **each person opens their own PR every day**, not one shared team PR. This makes individual contribution obvious in the commit history and satisfies "who did what" for grading/viva.
+One PR per day, branch named `day-XX-akhil`, merged into `main`.
 
 ### Branching
-- Each morning, both pull latest `main`: `git checkout main && git pull`
-- Each creates their own branch off `main`: `day-XX-akhil` and `day-XX-manuel` (e.g. `day-07-akhil`, `day-07-manuel`)
-- Work only inside your own branch/scope for the day (see Section 7 — the day-wise plan already splits tasks by person for exactly this reason)
+- Each day: `git checkout main && git pull origin main`
+- Create branch: `git checkout -b day-XX-akhil`
+- Push: `git push -u origin day-XX-akhil`
+- Open PR titled `Day N (Akhil): <scope>`
 
-### Opening PRs
-- Each person opens their own PR from their branch into `main`, titled `Day N (Akhil): <scope>` or `Day N (Manuel): <scope>`
-- Each PR is reviewed by the *other* teammate before merge — this is what makes it a review, not a rubber stamp
-- Both PRs for the day should be open and visible before either is merged, so the day's full scope is reviewable together
+### Commit message format
+`day-XX-akhil: <what was built>`
 
-### Merge order & avoiding conflicts
-- Decide each morning who merges first for that day (alternate, or whoever finishes first) — call this the "first merger"
-- The **first merger** merges their PR into `main` once reviewed
-- The **second merger** then runs `git checkout day-XX-<name> && git pull --rebase origin main`, resolves any conflicts locally, pushes with `git push --force-with-lease`, and merges
-- To minimize conflicts in the first place: if a day's tasks touch the same file (check Section 7's per-day split), the two of you briefly agree who owns which function/section before starting, rather than discovering the overlap at merge time
+Example: `day-08-akhil: implement features.py — join logic and all feature columns`
 
-### Joint tasks (repo setup, standups, shared docs)
-- Days with a "Joint / Team" column in Section 7 (e.g. Day 1 repo setup, Day 5 PRD submission) still get logged as work, but don't need a third PR
-- Split joint items across the two individual PRs that day (e.g. Akhil's PR includes the branch-protection setup, Manuel's PR includes the Team Charter fill-in) — alternate who carries the joint item each day so it's not always the same person's PR
-
-### Commit & PR conventions
-- Commit messages: `day-07-akhil: standardize booking_date and check_in_date formats`
-- PR description must state: what was built, which Section 7 "done when" criteria are met (your half of them), and who reviewed
-- No direct pushes to `main` — every day's work goes through a PR, even if scopes don't overlap
-- Do not merge a PR if its portion of the day's "done when" criteria isn't met — carry it forward rather than faking completion
-
-### Daily checklist
-1. Pull `main`, branch as `day-XX-<yourname>`
-2. Do your assigned scope from Section 7
-3. Push, open your PR, tag the other person as reviewer
-4. Review the other person's PR
-5. Merge in agreed order, rebase-and-resolve if needed
-6. Both submit individual daily journal entries (per PRD Block 1 standard)
+### Merge rule
+- Do not merge a PR unless the day's "done when" criteria are fully met.
+- Carry incomplete work forward rather than faking completion.
 
 ## 9. Coding Conventions
 
@@ -356,22 +324,21 @@ Rows where `segment` is null cannot be attributed to any channel. Decision: reta
 
 ### 11.4 File-level ownership (pipeline modules)
 
-| File | Owner | Implemented |
-|---|---|---|
-| `src/config.py` | Akhil | Day 1 |
-| `src/ingest.py` | Akhil | Day 6 |
-| `src/clean.py` — bookings | Akhil | Day 7–8 |
-| `src/clean.py` — cancellations | Manuel | Day 7 |
-| `src/clean.py` — seasonal_pricing | Manuel | Day 8 |
-| `src/features.py` — join | Akhil | Day 9 |
-| `src/features.py` — lead_time, cancel_flag | Akhil | Day 10 |
-| `src/features.py` — occupancy_rate, season_tag | Manuel | Day 10 |
-| `src/load.py` | Akhil | Day 11 |
-| `src/queries.py` | Akhil | Days 12–14 |
-| `sql/schema.sql` | Akhil | Day 5 |
-| `sql/kpi_queries.sql` | Akhil | Days 12–14 |
-| `app/dashboard.py` | Manuel | Days 16–19 |
-| `tests/test_data_quality.py` | Akhil | Day 17 |
+> Solo from Day 8. All remaining files owned by Akhil.
+
+| File | Implemented |
+|---|---|
+| `src/config.py` | Day 1 ✅ |
+| `src/ingest.py` | Day 6 ✅ |
+| `src/clean.py` — all three files | Day 7 ✅ |
+| `src/features.py` — full | Day 8 |
+| `src/load.py` | Day 9 |
+| `src/queries.py` — all 8 metrics | Day 10 |
+| `sql/schema.sql` | Day 5 ✅ |
+| `sql/kpi_queries.sql` | Day 9 |
+| `tests/test_data_quality.py` | Day 11 |
+| `app/dashboard.py` — full | Days 12–14 |
+| `docs/findings_summary.md` | Day 16 |
 
 ## 10. Global Definition of Done (Sprint 1)
 
