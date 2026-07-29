@@ -3,14 +3,16 @@ name: Data Quality
 on:
   push:
     paths:
-      - "data/**"
       - "src/**"
+      - "sql/**"
       - "tests/**"
+      - "requirements.txt"
   pull_request:
     paths:
-      - "data/**"
       - "src/**"
+      - "sql/**"
       - "tests/**"
+      - "requirements.txt"
 
 jobs:
   data-quality:
@@ -29,4 +31,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run data quality tests
-        run: pytest tests/ -v
+        run: pytest tests/ -v --tb=short
+
+      # Note: tests that require data files (raw CSVs, occupancy.db) skip
+      # automatically when those files are absent. The CI gate enforces
+      # schema-level and code-level correctness on every push.
+      # Full pipeline tests (with real data) are run locally before merging.
