@@ -324,21 +324,24 @@ Rows where `segment` is null cannot be attributed to any channel. Decision: reta
 
 ### 11.4 File-level ownership (pipeline modules)
 
-> Solo from Day 8. All remaining files owned by Akhil.
+> Solo from Day 8. All files owned by Akhil K Kurian.
 
-| File | Implemented |
-|---|---|
-| `src/config.py` | Day 1 ✅ |
-| `src/ingest.py` | Day 6 ✅ |
-| `src/clean.py` — all three files | Day 7 ✅ |
-| `src/features.py` — full | Day 8 |
-| `src/load.py` | Day 9 |
-| `src/queries.py` — all 8 metrics | Day 10 |
-| `sql/schema.sql` | Day 5 ✅ |
-| `sql/kpi_queries.sql` | Day 9 |
-| `tests/test_data_quality.py` | Day 11 |
-| `app/dashboard.py` — full | Days 12–14 |
-| `docs/findings_summary.md` | Day 16 |
+| File | Implemented | Status |
+|---|---|---|
+| `src/config.py` | Day 1 | ✅ |
+| `src/ingest.py` | Day 6 | ✅ |
+| `src/clean.py` — all three files | Day 7 | ✅ |
+| `src/features.py` — full | Day 8 | ✅ |
+| `src/load.py` | Day 9 | ✅ |
+| `src/queries.py` — all 8 metrics | Day 10 | ✅ |
+| `sql/schema.sql` | Day 5 | ✅ |
+| `sql/kpi_queries.sql` | Day 9 | ✅ |
+| `tests/test_data_quality.py` | Day 11 | ✅ |
+| `app/dashboard.py` — full (9 sections, all 8 metrics) | Days 12–14 | ✅ |
+| `notebooks/04_eda_occupancy_trends.ipynb` | Day 15 | ✅ |
+| `docs/findings_summary.md` | Day 16 | ✅ |
+| `docs/viva_notes.md` | Day 17 | ✅ |
+| `README.md` — complete run guide | Day 16 | ✅ |
 
 ## 10. Global Definition of Done (Sprint 1)
 
